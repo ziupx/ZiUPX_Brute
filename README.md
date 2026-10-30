@@ -23,4 +23,6 @@ ZiUPX Smart Brute делает иначе:
 🛠 Установка и запуск (Termux Android)
 '''bash
 pkg update -y && pkg upgrade -y
-git clone 
+git clone https://github.com/ziupx/ZiUPX_Brute.git
+cd ZiUPX_Bruteforce
+python ZiUPX_Brute.py
