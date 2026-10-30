@@ -1,12 +1,10 @@
 import os
-import sys
 import requests
 import concurrent.futures
 from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.align import Align
-from rich.panel import Panel
 from datetime import datetime
 
 console = Console()
@@ -22,8 +20,8 @@ def print_banner():
 ███████╗██║╚██████╔╝██║     ██╔╝ ██╗
 ╚══════╝╚═╝ ╚═════╝ ╚═╝     ╚═╝  ╚═╝
 [/bold cyan]
-[bold green]   [+] ZiUPX Smart Brute v1.2[/bold green]
-[bold white]   [+] Intelligent Directory Fuzzer (with Content Sniffer)[/bold white]
+[bold green]   [+] ZiUPX Smart Brute v1.3[/bold green]
+[bold white]   [+] Intelligent Directory Fuzzer (Full Content Saver)[/bold white]
     """
     console.print(Align.center(banner))
     console.print("[bold yellow]═══════════════════════════════════════════════════════════[/bold yellow]\n")
@@ -41,22 +39,25 @@ def calibrate(url, headers):
         console.print(f"[red][!] Ошибка калибровки: {e}[/red]")
         return None
 
-def fetch_content(url):
-    """Пытается прочитать первые строки файла, если это текст"""
+def save_full_content(url, path):
+    """Скачивает и сохраняет полный текст файла"""
+    # Создаем папку для скачанных файлов, если её нет
+    os.makedirs("downloads", exist_ok=True)
+    
+    # Очищаем имя файла от слешей, чтобы сохранить его на диск
+    safe_name = path.replace('/', '_').replace('?', '_').replace('&', '_')
+    if not safe_name: 
+        safe_name = "index.html"
+        
+    filepath = os.path.join("downloads", safe_name)
+    
     try:
-        response = requests.get(url, timeout=3)
-        # Проверяем, текст ли это (если Content-Type содержит text или json)
-        content_type = response.headers.get('Content-Type', '')
-        if 'text' in content_type or 'json' in content_type or 'javascript' in content_type:
-            # Берем первые 5 строк
-            lines = response.text.split('\n')[:5]
-            content = '\n'.join(lines)
-            if len(content) > 300:
-                content = content[:300] + "..."
-            return content.strip()
-    except:
-        pass
-    return None
+        response = requests.get(url, timeout=5)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(response.text)
+        return filepath
+    except Exception as e:
+        return None
 
 def scan_url(url, path, fake_size, headers):
     target_url = f"{url}/{path}"
@@ -66,18 +67,17 @@ def scan_url(url, path, fake_size, headers):
         if response.status_code in [200, 301, 302, 403]:
             current_size = len(response.content)
             
-            # УМНАЯ ФИЛЬТРАЦИЯ
             if current_size != fake_size:
                 result = {
                     "path": path,
                     "status": response.status_code,
                     "size": current_size,
-                    "content": None
+                    "saved_file": None
                 }
                 
-                # Если код 200, пытаемся прочитать содержимое
+                # Если код 200, скачиваем полный файл
                 if response.status_code == 200:
-                    result["content"] = fetch_content(target_url)
+                    result["saved_file"] = save_full_content(target_url, path)
                     
                 return result
     except:
@@ -96,7 +96,7 @@ def main():
     console.print("[bold cyan]Введите URL сайта (например, http://testphp.vulnweb.com):[/bold cyan]")
     target_url = input("> ").strip().rstrip('/')
     
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZiUPX-Brute/1.2"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZiUPX-Brute/1.3"}
 
     fake_size = calibrate(target_url, headers)
     if fake_size is None:
@@ -130,6 +130,7 @@ def main():
         table.add_column("Путь", style="cyan")
         table.add_column("Код", style="bold")
         table.add_column("Размер", style="white")
+        table.add_column("Файл сохранен", style="green")
         
         for item in found_paths:
             status = item["status"]
@@ -140,31 +141,23 @@ def main():
             else:
                 status_str = f"[bold red]{status}[/bold red]"
                 
-            table.add_row(item["path"], status_str, format_size(item["size"]))
+            saved = "Да" if item["saved_file"] else "-"
+            table.add_row(item["path"], status_str, format_size(item["size"]), saved)
             
         console.print(table)
         
-        # Вывод содержимого (если оно есть)
-        console.print("\n[bold cyan]--- Содержимое найденных файлов (первые строки) ---[/bold cyan]")
-        for item in found_paths:
-            if item.get("content"):
-                console.print(Panel(
-                    f"[white]{item['content']}[/white]", 
-                    title=f"[bold green]/{item['path']}[/bold green]", 
-                    border_style="cyan"
-                ))
-                
-        # Сохранение в файл
+        # Сохранение общего отчета
         filename = f"brute_result_{target_url.replace('http://','').replace('https://','').replace('/','_')}.txt"
         with open(filename, "w", encoding="utf-8") as f:
             f.write(f"ZiUPX Smart Brute Report - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Target: {target_url}\n\n")
             for item in found_paths:
                 f.write(f"[{item['status']}] /{item['path']} - {format_size(item['size'])}\n")
-                if item.get("content"):
-                    f.write(f"    Content: {item['content'][:100]}...\n")
+                if item["saved_file"]:
+                    f.write(f"    Сохранено в: {item['saved_file']}\n")
                 
         console.print(f"\n[bold green][✓] Отчет сохранен в файл: {filename}[/bold green]")
+        console.print(f"[bold cyan][✓] Полные версии найденных файлов лежат в папке 'downloads/'[/bold cyan]")
         
     else:
         console.print("[bold red][!] Скрытых путей не найдено.[/bold red]")
