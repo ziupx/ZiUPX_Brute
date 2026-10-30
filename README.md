@@ -25,5 +25,5 @@ ZiUPX Smart Brute делает иначе:
 ```bash
 pkg update -y && pkg upgrade -y
 git clone https://github.com/ziupx/ZiUPX_Brute.git
-cd ZiUPX_Bruteforce
+cd ZiUPX_Brute
 python ZiUPX_Brute.py
